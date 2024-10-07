@@ -4,6 +4,7 @@ import com.mbarca.ByR.domain.Images;
 import com.mbarca.ByR.service.FileStorageService;
 import org.imgscalr.Scalr;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.imageio.IIOImage;
@@ -23,6 +24,7 @@ import com.drew.metadata.Directory;
 import com.drew.metadata.Metadata;
 import com.drew.metadata.exif.ExifIFD0Directory;
 
+@Service
 public class ImageCompressor {
     @Autowired
     private FileStorageService fileStorageService;
@@ -34,7 +36,7 @@ public class ImageCompressor {
         BufferedImage rotatedImage = rotateImage(originalImage, imageData);
 
         // Resize the rotated image to 640x360 or 320x184
-        BufferedImage resizedImage = resizeImage(rotatedImage, 640, 360);
+        BufferedImage resizedImage = resizeImage(rotatedImage, 1280, 720);
         BufferedImage resizedThumbnail = resizeImage(rotatedImage, 320, 184);
 
         // Convert resized image and thumbnail to JPG
@@ -42,7 +44,7 @@ public class ImageCompressor {
         byte[] thumbnail = convertToJPG(resizedThumbnail);
 
         if (saveFile) {
-            String subDir = propertyName + "/Imagenes/" + fileName;
+            String subDir = propertyName;
             List<String> paths = saveImages(fullImage, thumbnail, imageData, subDir, fileName);
             return new Images(fullImage, thumbnail, paths);
         } else {

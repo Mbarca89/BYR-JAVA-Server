@@ -3,6 +3,7 @@ package com.mbarca.ByR.service;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
+import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
@@ -20,6 +21,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+@Service
 public class FileStorageService {
     private final Path rootLocation;
 
@@ -79,6 +81,18 @@ public class FileStorageService {
             }
         } catch (MalformedURLException e) {
             throw new RuntimeException("Error al leer el archivo: " + filename, e);
+        }
+    }
+
+    public void deletePropertyDirectory(String propertyName) {
+        Path patientDirectory = rootLocation.resolve(propertyName);
+        try {
+            Files.walk(patientDirectory)
+                    .sorted(Comparator.reverseOrder())
+                    .map(Path::toFile)
+                    .forEach(File::delete);
+        } catch (IOException e) {
+            throw new RuntimeException("Error al eliminar el directorio de la propiedad", e);
         }
     }
 
