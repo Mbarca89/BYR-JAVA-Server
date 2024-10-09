@@ -18,6 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @RestController
@@ -34,11 +35,13 @@ public class PropertyController {
     public ResponseEntity<?> publishProperty(@RequestParam(value = "images", required = false) List<MultipartFile> files,
                                              @Valid @RequestParam("propertyData") String propertyJson) throws Exception {
         Property property = new ObjectMapper().readValue(propertyJson, Property.class);
+        System.out.println(property.getImageOrder());
+        propertyService.findPropertyByName(property.getName());
         List<PropertyImages> propertyImagesList = new ArrayList<>();
         if (files != null && !files.isEmpty()) {
             for (MultipartFile file : files) {
                 if (!file.isEmpty()) {
-                    Images compressedImages = imageCompressor.compressImage(file.getBytes(), true,file.getOriginalFilename(), property.getName());
+                    Images compressedImages = imageCompressor.compressImage(file.getBytes(), true, file.getOriginalFilename(), property.getName());
                     PropertyImages propertyImage = new PropertyImages();
                     propertyImage.setThumbnailUrl(compressedImages.getPaths().get(1));
                     propertyImage.setUrl(compressedImages.getPaths().get(0));
@@ -69,27 +72,74 @@ public class PropertyController {
     }
 
     @GetMapping("/featured")
-    public ResponseEntity<?> getFeaturedProperties () {
+    public ResponseEntity<?> getFeaturedProperties() {
         List<PropertyResponseDto> properties = propertyService.getFeaturedProperties();
         return ResponseEntity.status(HttpStatus.OK).body(properties);
     }
 
     @GetMapping("/last")
-    public ResponseEntity<?> getLastProperties () {
+    public ResponseEntity<?> getLastProperties() {
         List<PropertyResponseDto> properties = propertyService.getLastProperties();
         return ResponseEntity.status(HttpStatus.OK).body(properties);
     }
 
     @GetMapping("")
-    public ResponseEntity<?> getAllProperties () {
+    public ResponseEntity<?> getAllProperties() {
         List<PropertyResponseDto> properties = propertyService.getAllProperties();
         return ResponseEntity.status(HttpStatus.OK).body(properties);
     }
 
     @GetMapping("/getById")
-    public ResponseEntity<?> getAllProperties (@RequestParam UUID propertyId) {
-        PropertyResponseDto property = propertyService.getById(propertyId);
-        return ResponseEntity.status(HttpStatus.OK).body(property);
+    public ResponseEntity<?> getProeprtyById(@RequestParam UUID propertyId) {
+        Property property = propertyService.getById(propertyId);
+        PropertyResponseDto response = PropertyMapper.INSTANCE.toDto(property);
+        return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
+
+    @PutMapping("/edit/{id}")
+    public ResponseEntity<?> editProperty(@PathVariable("id") UUID propertyId,
+                                          @RequestParam(value = "images", required = false) List<MultipartFile> files,
+                                          @Valid @RequestParam("propertyData") String propertyJson) throws Exception {
+        Property updatedProperty = new ObjectMapper().readValue(propertyJson, Property.class);
+        Property existingProperty = propertyService.getByIdToEdit(propertyId);
+
+        existingProperty.setName(updatedProperty.getName());
+        existingProperty.setDescription(updatedProperty.getDescription());
+        existingProperty.setType(updatedProperty.getType());
+        existingProperty.setCategory(updatedProperty.getCategory());
+        existingProperty.setPrice(updatedProperty.getPrice());
+        existingProperty.setCurrency(updatedProperty.getCurrency());
+        existingProperty.setLocation(updatedProperty.getLocation());
+        existingProperty.setSize(updatedProperty.getSize());
+        existingProperty.setConstructed(updatedProperty.getConstructed());
+        existingProperty.setBedrooms(updatedProperty.getBedrooms());
+        existingProperty.setBathrooms(updatedProperty.getBathrooms());
+        existingProperty.setKitchen(updatedProperty.getKitchen());
+        existingProperty.setGarage(updatedProperty.getGarage());
+        existingProperty.setOthers(updatedProperty.getOthers());
+        existingProperty.setServices(updatedProperty.getServices());
+        existingProperty.setAmenities(updatedProperty.getAmenities());
+        existingProperty.setFeatured(updatedProperty.getFeatured());
+        existingProperty.setImageOrder(updatedProperty.getImageOrder());
+
+        if (files != null && !files.isEmpty()) {
+            List<PropertyImages> newPropertyImages = new ArrayList<>();
+            for (MultipartFile file : files) {
+                if (!file.isEmpty()) {
+                    Images compressedImages = imageCompressor.compressImage(file.getBytes(), true, file.getOriginalFilename(), updatedProperty.getName());
+                    PropertyImages propertyImage = new PropertyImages();
+                    propertyImage.setThumbnailUrl(compressedImages.getPaths().get(1));
+                    propertyImage.setUrl(compressedImages.getPaths().get(0));
+                    propertyImage.setProperty(existingProperty);
+                    newPropertyImages.add(propertyImage);
+                }
+            }
+            existingProperty.getImages().addAll(newPropertyImages);
+        }
+
+        propertyService.publishProperty(existingProperty);
+
+        return ResponseEntity.status(HttpStatus.OK).body("Propiedad editada correctamente");
     }
 
 }

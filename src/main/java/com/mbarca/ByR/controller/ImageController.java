@@ -33,7 +33,6 @@ public class ImageController {
 
             // Crear el recurso
             Resource resource = new UrlResource(filePath.toUri());
-            System.out.println(resource);
             if (resource.exists() && resource.isReadable()) {
                 return ResponseEntity.ok()
                         .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + resource.getFilename() + "\"")

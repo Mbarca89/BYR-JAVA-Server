@@ -76,6 +76,9 @@ public class Property {
     @OneToMany(mappedBy = "property", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<PropertyImages> images;
 
+    @Column(nullable = true)
+    private List<Integer> imageOrder;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     @Temporal(TemporalType.TIMESTAMP)
     private java.util.Date createdAt;

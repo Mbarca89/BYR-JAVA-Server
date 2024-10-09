@@ -32,6 +32,7 @@ public class PropertyResponseDto {
     private List<String> amenities;
     private Boolean featured;
     private List<PropertyImages> images;
+    private List<Integer> imageOrder;
     private java.util.Date createdAt;
     private java.util.Date updatedAt;
 }

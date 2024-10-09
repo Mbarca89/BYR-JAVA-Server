@@ -11,7 +11,6 @@ import java.nio.file.Paths;
 public class UrlGenerator {
 
     public String generateUrlList(String filepath) {
-        System.out.println(filepath);
         // Convertir la ruta del archivo de Windows a una ruta relativa
         Path path = Paths.get(filepath);
 
@@ -22,9 +21,6 @@ public class UrlGenerator {
         // Convertir las rutas a Strings y codificar para URL
         String propertyId = encodeURIComponent(propertyDir.getFileName().toString()); // ID de la propiedad
         String filename = encodeURIComponent(fileName.toString()); // Nombre del archivo
-
-        System.out.println(propertyId);
-        System.out.println(propertyDir);
 
         String baseUrl = "http://localhost:8080/api/images/";
         String imageUrl;

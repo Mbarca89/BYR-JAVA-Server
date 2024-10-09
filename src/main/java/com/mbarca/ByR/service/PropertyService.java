@@ -3,6 +3,7 @@ package com.mbarca.ByR.service;
 import com.mbarca.ByR.domain.ImageUrls;
 import com.mbarca.ByR.dto.Response.PropertyResponseDto;
 import com.mbarca.ByR.exceptions.NotFoundException;
+import com.mbarca.ByR.exceptions.RepositoryException;
 import com.mbarca.ByR.mapper.PropertyMapper;
 import com.mbarca.ByR.model.Property;
 import com.mbarca.ByR.model.PropertyImages;
@@ -37,6 +38,13 @@ public class PropertyService {
         return propertyRepository.findAll();
     }
 
+    public void findPropertyByName (String name) throws RepositoryException {
+        Optional<Property> propertyOptional = propertyRepository.findByName(name);
+        if(propertyOptional.isPresent()) {
+            throw new RepositoryException("Ya existe una propiedad con ese nombre");
+        }
+    }
+
     public void deleteProperty(UUID propertyId, String propertyName) {
         propertyRepository.deleteById(propertyId);
         fileStorageService.deletePropertyDirectory(propertyName);
@@ -46,7 +54,7 @@ public class PropertyService {
         List<Property> properties = propertyRepository.findFeaturedPropertiesWithImages();
         for(Property property : properties) {
             PropertyImages newImages = new PropertyImages();
-            newImages.setUrl(urlGenerator.generateUrlList(property.getImages().getFirst().getUrl()));
+            newImages.setUrl(urlGenerator.generateUrlList(property.getImages().get(property.getImageOrder().getFirst()).getUrl()));
             List<PropertyImages> newPropertyImages = new ArrayList<>();
             newPropertyImages.add(newImages);
             property.setImages(newPropertyImages);
@@ -58,7 +66,7 @@ public class PropertyService {
         List<Property> properties = propertyRepository.findTop10ByOrderByCreatedAtDesc();
         for(Property property : properties) {
             PropertyImages newImages = new PropertyImages();
-            newImages.setThumbnailUrl(urlGenerator.generateUrlList(property.getImages().getFirst().getThumbnailUrl()));
+            newImages.setThumbnailUrl(urlGenerator.generateUrlList(property.getImages().get(property.getImageOrder().getFirst()).getThumbnailUrl()));
             List<PropertyImages> newPropertyImages = new ArrayList<>();
             newPropertyImages.add(newImages);
             property.setImages(newPropertyImages);
@@ -70,7 +78,7 @@ public class PropertyService {
         List<Property> properties = propertyRepository.findAll();
         for(Property property : properties) {
             PropertyImages newImages = new PropertyImages();
-            newImages.setThumbnailUrl(urlGenerator.generateUrlList(property.getImages().getFirst().getThumbnailUrl()));
+            newImages.setThumbnailUrl(urlGenerator.generateUrlList(property.getImages().get(property.getImageOrder().getFirst()).getThumbnailUrl()));
             List<PropertyImages> newPropertyImages = new ArrayList<>();
             newPropertyImages.add(newImages);
             property.setImages(newPropertyImages);
@@ -78,7 +86,7 @@ public class PropertyService {
         return properties.stream().map(PropertyMapper.INSTANCE::toDto).toList();
     }
 
-    public PropertyResponseDto getById (UUID propertyId) {
+    public Property getById (UUID propertyId) {
         Optional<Property> propertyOptional = propertyRepository.findById(propertyId);
         Property property = new Property();
         if(propertyOptional.isPresent()) {
@@ -88,9 +96,21 @@ public class PropertyService {
         }
         List<PropertyImages> images = property.getImages();
         for(PropertyImages image : images) {
+            image.setThumbnailUrl(urlGenerator.generateUrlList(image.getThumbnailUrl()));
             image.setUrl(urlGenerator.generateUrlList(image.getUrl()));
         }
         property.setImages(images);
-        return PropertyMapper.INSTANCE.toDto(property);
+        return property;
+    }
+
+    public Property getByIdToEdit (UUID propertyId) {
+        Optional<Property> propertyOptional = propertyRepository.findById(propertyId);
+        Property property = new Property();
+        if(propertyOptional.isPresent()) {
+            property = propertyOptional.get();
+        } else {
+            throw new NotFoundException("Propiedad no encontrada");
+        }
+        return property;
     }
 }
