@@ -5,8 +5,7 @@ import lombok.*;
 import java.util.List;
 
 
-@AllArgsConstructor
-@NoArgsConstructor
+
 public class Images {
     byte [] fullImage;
     byte [] thumbnail;
@@ -15,6 +14,15 @@ public class Images {
     public Images(byte[] fullImage, byte[] thumbnail) {
         this.fullImage = fullImage;
         this.thumbnail = thumbnail;
+    }
+
+    public Images() {
+    }
+
+    public Images(byte[] fullImage, byte[] thumbnail, List<String> paths) {
+        this.fullImage = fullImage;
+        this.thumbnail = thumbnail;
+        this.paths = paths;
     }
 
     public byte[] getFullImage() {
