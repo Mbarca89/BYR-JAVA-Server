@@ -8,8 +8,6 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "property_images")
-@Setter
-@Getter
 @AllArgsConstructor
 @NoArgsConstructor
 public class PropertyImages {
@@ -27,4 +25,36 @@ public class PropertyImages {
 
         @Column(nullable = false)
         private String thumbnailUrl;
+
+        public UUID getId() {
+                return id;
+        }
+
+        public void setId(UUID id) {
+                this.id = id;
+        }
+
+        public Property getProperty() {
+                return property;
+        }
+
+        public void setProperty(Property property) {
+                this.property = property;
+        }
+
+        public String getUrl() {
+                return url;
+        }
+
+        public void setUrl(String url) {
+                this.url = url;
+        }
+
+        public String getThumbnailUrl() {
+                return thumbnailUrl;
+        }
+
+        public void setThumbnailUrl(String thumbnailUrl) {
+                this.thumbnailUrl = thumbnailUrl;
+        }
 }
