@@ -22,7 +22,7 @@ public class UrlGenerator {
         String propertyId = encodeURIComponent(propertyDir.getFileName().toString()); // ID de la propiedad
         String filename = encodeURIComponent(fileName.toString()); // Nombre del archivo
 
-        String baseUrl = "http://localhost:8080/api/images/";
+        String baseUrl = "https://inmobiliariabyr.com.ar/api/images/";
         String imageUrl;
         String thumbnailUrl;
 
