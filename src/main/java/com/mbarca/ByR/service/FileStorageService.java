@@ -99,4 +99,17 @@ public class FileStorageService {
     private Path load(String filename) {
         return rootLocation.resolve(filename);
     }
+
+    public void deleteFileByPath(String filePath) {
+        try {
+            Path file = Paths.get(filePath).normalize().toAbsolutePath();
+            if (Files.exists(file)) {
+                Files.delete(file);
+            } else {
+                throw new RuntimeException("El archivo no existe: " + filePath);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Error al eliminar el archivo: " + filePath, e);
+        }
+    }
 }

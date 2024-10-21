@@ -1,5 +1,7 @@
 package com.mbarca.ByR.controller;
 
+import com.mbarca.ByR.service.ImageService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -11,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import java.net.MalformedURLException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/images")
@@ -19,6 +22,9 @@ public class ImageController {
 
     @Value("${file.storage.location}")
     private String storageLocation;
+
+    @Autowired
+    ImageService imageService;
 
     @GetMapping("/{property}/{filename:.+}")
     public ResponseEntity<Resource> getImage(
@@ -46,6 +52,12 @@ public class ImageController {
             e.printStackTrace();  // Agregar log para detalles del error
             return ResponseEntity.internalServerError().build();
         }
+    }
+
+    @DeleteMapping("/delete")
+    public ResponseEntity<?> deleteById (@RequestParam UUID id) {
+        String response = imageService.deleteImage(id);
+        return ResponseEntity.status(HttpStatus.OK).body(response);
     }
 
 }

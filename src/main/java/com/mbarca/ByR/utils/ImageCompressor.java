@@ -113,9 +113,9 @@ public class ImageCompressor {
     private  List<String> saveImages(byte[] fullImage, byte[] thumbnail, byte[] originalImage, String subDir, String imageName) throws IOException {
         CustomMultipartFile fullImageFile = new CustomMultipartFile(fullImage, "fullImage", imageName + "_full.jpg", "image/jpeg");
         CustomMultipartFile thumbnailFile = new CustomMultipartFile(thumbnail, "thumbnail", imageName + "_thumb.jpg", "image/jpeg");
-        CustomMultipartFile originalFile = new CustomMultipartFile(originalImage, "HD", imageName + "_HD.jpg", "image/jpeg");
+//        CustomMultipartFile originalFile = new CustomMultipartFile(originalImage, "HD", imageName + "_HD.jpg", "image/jpeg");
 
-        MultipartFile[] files = {fullImageFile, thumbnailFile, originalFile};
+        MultipartFile[] files = {fullImageFile, thumbnailFile};
         return fileStorageService.store(files, subDir);
     }
 }
