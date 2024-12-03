@@ -3,6 +3,7 @@ package com.mbarca.ByR.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mbarca.ByR.domain.Images;
 import com.mbarca.ByR.dto.Response.PropertyListResponseDto;
+import com.mbarca.ByR.dto.Response.PropertyPaginatedResponseDto;
 import com.mbarca.ByR.dto.Response.PropertyResponseDto;
 import com.mbarca.ByR.mapper.PropertyMapper;
 import com.mbarca.ByR.model.Property;
@@ -11,6 +12,8 @@ import com.mbarca.ByR.service.PropertyService;
 import com.mbarca.ByR.utils.ImageCompressor;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.web.PagedResourcesAssembler;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -89,8 +92,22 @@ public class PropertyController {
         return ResponseEntity.status(HttpStatus.OK).body(properties);
     }
 
+    @GetMapping("/paginated")
+    public ResponseEntity<?> getPaginatedProperties(@RequestParam int limit,
+                                                    @RequestParam int offset,
+                                                    @RequestParam(required = false) String type,
+                                                    @RequestParam(required = false) String category,
+                                                    @RequestParam(required = false) String location,
+                                                    PagedResourcesAssembler<PropertyResponseDto> assembler) {
+        System.out.println("tipo:" + type);
+        System.out.println("categoria" + category);
+        System.out.println("ubicacion: " +location);
+        Page<PropertyResponseDto> properties = propertyService.getPaginatedProperties(offset, limit, type, category, location);
+        return ResponseEntity.status(HttpStatus.OK).body(assembler.toModel(properties));
+    }
+
     @GetMapping("/getById")
-    public ResponseEntity<?> getProeprtyById(@RequestParam UUID propertyId) {
+    public ResponseEntity<?> getPropertyById(@RequestParam UUID propertyId) {
         Property property = propertyService.getById(propertyId);
         PropertyResponseDto response = PropertyMapper.INSTANCE.toDto(property);
         return ResponseEntity.status(HttpStatus.OK).body(response);

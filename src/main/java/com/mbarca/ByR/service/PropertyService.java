@@ -1,6 +1,7 @@
 package com.mbarca.ByR.service;
 
 import com.mbarca.ByR.domain.ImageUrls;
+import com.mbarca.ByR.dto.Response.PropertyPaginatedResponseDto;
 import com.mbarca.ByR.dto.Response.PropertyResponseDto;
 import com.mbarca.ByR.exceptions.NotFoundException;
 import com.mbarca.ByR.exceptions.RepositoryException;
@@ -9,9 +10,13 @@ import com.mbarca.ByR.model.Property;
 import com.mbarca.ByR.model.PropertyImages;
 import com.mbarca.ByR.repository.PropertyRepository;
 import com.mbarca.ByR.utils.ImageCompressor;
+import org.springframework.data.domain.Page;
 import com.mbarca.ByR.utils.UrlGenerator;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.PageRequest;
+
 
 import java.util.ArrayList;
 import java.util.List;
@@ -84,6 +89,29 @@ public class PropertyService {
             property.setImages(newPropertyImages);
         }
         return properties.stream().map(PropertyMapper.INSTANCE::toDto).toList();
+    }
+
+    public Page<PropertyResponseDto> getPaginatedProperties(int offset, int limit, String type, String category, String location) {
+        Pageable pageable = PageRequest.of(offset, limit);
+        String processedType = (type == null || type.trim().isEmpty()) ? null : type;
+        String processedCategory = (category == null || category.trim().isEmpty()) ? null : category;
+        String processedLocation = (location == null || location.trim().isEmpty()) ? null : location;
+
+
+        Page<Property> propertyPage = propertyRepository.findAllWithFilters(processedType, processedCategory, processedLocation, pageable);
+
+        return propertyPage.map(property -> {
+            PropertyImages newImages = new PropertyImages();
+            newImages.setThumbnailUrl(urlGenerator.generateUrlList(
+                    property.getImages().get(property.getImageOrder().getFirst()).getThumbnailUrl())
+            );
+
+            List<PropertyImages> newPropertyImages = new ArrayList<>();
+            newPropertyImages.add(newImages);
+            property.setImages(newPropertyImages);
+
+            return PropertyMapper.INSTANCE.toDto(property);
+        });
     }
 
     public Property getById (UUID propertyId) {
