@@ -1,63 +1,19 @@
 package com.mbarca.ByR.controller;
-
-import com.mbarca.ByR.service.ImageService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
+import com.mbarca.ByR.service.*;
 import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
-
-import java.net.MalformedURLException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.UUID;
-
-@RestController
-@RequestMapping("/api/images")
-@CrossOrigin
+@RestController @RequestMapping("/api/images")
 public class ImageController {
-
-    @Value("${file.storage.location}")
-    private String storageLocation;
-
-    @Autowired
-    ImageService imageService;
-
+    private final FileStorageService storage;
+    private final ImageService images;
+    public ImageController(FileStorageService storage, ImageService images) { this.storage = storage; this.images = images; }
     @GetMapping("/{property}/{filename:.+}")
-    public ResponseEntity<Resource> getImage(
-            @PathVariable String property,
-            @PathVariable String filename) {
-        try {
-            // Construir la ruta completa del archivo
-            Path filePath = Paths.get(storageLocation)
-                    .resolve(property)
-                    .resolve(filename)
-                    .normalize();
-
-            // Crear el recurso
-            Resource resource = new UrlResource(filePath.toUri());
-            if (resource.exists() && resource.isReadable()) {
-                return ResponseEntity.ok()
-                        .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + resource.getFilename() + "\"")
-                        .body(resource);
-            } else {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-            }
-        } catch (MalformedURLException e) {
-            return ResponseEntity.badRequest().body(null);
-        } catch (Exception e) {
-            e.printStackTrace();  // Agregar log para detalles del error
-            return ResponseEntity.internalServerError().build();
-        }
+    public ResponseEntity<Resource> getImage(@PathVariable String property, @PathVariable String filename) {
+        return ResponseEntity.ok().contentType(MediaType.IMAGE_JPEG).body(storage.loadImage(property, filename));
     }
-
-    @DeleteMapping("/delete")
-    public ResponseEntity<?> deleteById (@RequestParam UUID id) {
-        String response = imageService.deleteImage(id);
-        return ResponseEntity.status(HttpStatus.OK).body(response);
+    @DeleteMapping("/delete") public ResponseEntity<String> deleteById(@RequestParam UUID id) {
+        return ResponseEntity.ok(images.deleteImage(id));
     }
-
 }

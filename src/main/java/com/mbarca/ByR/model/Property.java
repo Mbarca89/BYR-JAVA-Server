@@ -1,6 +1,7 @@
 package com.mbarca.ByR.model;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.*;
 import lombok.*;
 
 import java.util.Date;
@@ -18,42 +19,54 @@ public class Property {
     private UUID id;
 
     @Column(nullable = false)
+    @NotBlank @Size(max = 255)
     private String name;
 
     @Column(columnDefinition = "TEXT")
     private String description;
 
     @Column(nullable = false)
+    @NotBlank @Size(max = 255)
     private String type;
 
     @Column(nullable = false)
+    @NotBlank @Size(max = 255)
     private String category;
 
     @Column(nullable = false)
+    @NotNull @Min(0)
     private Integer price;
 
     @Column(nullable = false)
+    @NotBlank @Size(max = 255)
     private String currency;
 
     @Column(nullable = false)
+    @NotBlank @Size(max = 255)
     private String location;
 
     @Column(nullable = false)
+    @NotNull @Min(0)
     private Integer size;
 
     @Column(nullable = false)
+    @NotNull @Min(0)
     private Integer constructed;
 
     @Column(nullable = false, columnDefinition = "integer default 1")
+    @NotNull @Min(0)
     private Integer bedrooms;
 
     @Column(nullable = false, columnDefinition = "integer default 1")
+    @NotNull @Min(0)
     private Integer bathrooms;
 
     @Column(nullable = false, columnDefinition = "integer default 0")
+    @NotNull @Min(0)
     private Integer kitchen;
 
     @Column(nullable = false, columnDefinition = "integer default 0")
+    @NotNull @Min(0)
     private Integer garage;
 
     @ElementCollection
@@ -69,6 +82,7 @@ public class Property {
     private List<String> amenities;
 
     @Column(nullable = false, columnDefinition = "boolean default false")
+    @NotNull
     private Boolean featured;
 
     @OneToMany(mappedBy = "property", cascade = CascadeType.ALL, orphanRemoval = true)

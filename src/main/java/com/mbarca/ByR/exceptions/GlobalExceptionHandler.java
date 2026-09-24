@@ -1,56 +1,43 @@
 package com.mbarca.ByR.exceptions;
-
-import jakarta.validation.ConstraintViolation;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import jakarta.validation.ConstraintViolationException;
-import org.springframework.context.support.DefaultMessageSourceResolvable;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.transaction.TransactionSystemException;
-import org.springframework.web.bind.MethodArgumentNotValidException;
-import org.springframework.web.bind.annotation.ControllerAdvice;
-import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.slf4j.*;
+import org.springframework.http.*;
+import org.springframework.web.bind.*;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
-
-import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
-
-@ControllerAdvice
+import java.util.Map;
+@RestControllerAdvice
 public class GlobalExceptionHandler {
-    @ExceptionHandler(MaxUploadSizeExceededException.class)
-    public ResponseEntity<String> handleMaxUploadSizeExceededException(MaxUploadSizeExceededException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("La imagen es demasiado grande");
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private ResponseEntity<Map<String, String>> error(HttpStatus status, String message) {
+        return ResponseEntity.status(status).body(Map.of("message", message));
     }
-
+    @ExceptionHandler(NotFoundException.class)
+    public ResponseEntity<?> notFound(NotFoundException e) { return error(HttpStatus.NOT_FOUND, e.getMessage()); }
+    @ExceptionHandler(RepositoryException.class)
+    public ResponseEntity<?> conflict(RepositoryException e) { return error(HttpStatus.CONFLICT, e.getMessage()); }
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<?> invalid(IllegalArgumentException e) { return error(HttpStatus.BAD_REQUEST, e.getMessage()); }
+    @ExceptionHandler({JsonProcessingException.class, MethodArgumentTypeMismatchException.class,
+        MissingServletRequestParameterException.class, org.springframework.http.converter.HttpMessageNotReadableException.class})
+    public ResponseEntity<?> malformed(Exception e) { return error(HttpStatus.BAD_REQUEST, "Los datos enviados no son válidos"); }
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<String> handleValidationExceptions(MethodArgumentNotValidException ex) {
-        List<String> errors = ex.getBindingResult().getAllErrors().stream()
-                .map(DefaultMessageSourceResolvable::getDefaultMessage)
-                .collect(Collectors.toList());
-        String errorMessage = String.join("\n", errors);
-        ex.printStackTrace();
-        return new ResponseEntity<>(errorMessage, HttpStatus.BAD_REQUEST);
+    public ResponseEntity<?> validation(MethodArgumentNotValidException e) {
+        return error(HttpStatus.BAD_REQUEST, "Revisá los campos obligatorios y la longitud de las contraseñas");
     }
-
-    @ExceptionHandler(TransactionSystemException.class)
-    public ResponseEntity<String> handleTransactionSystemException(TransactionSystemException ex) {
-        Throwable cause = ex.getRootCause();
-
-        if (cause instanceof ConstraintViolationException) {
-            ConstraintViolationException violationException = (ConstraintViolationException) cause;
-            Set<ConstraintViolation<?>> violations = violationException.getConstraintViolations();
-
-            String errorMessage = violations.stream()
-                    .map(ConstraintViolation::getMessage)
-                    .collect(Collectors.joining("\n"));
-
-            return new ResponseEntity<>(errorMessage, HttpStatus.BAD_REQUEST);
-        }
-
-        return new ResponseEntity<>("Error en la transacción: " + (cause != null ? cause.getMessage() : ex.getMessage()), HttpStatus.INTERNAL_SERVER_ERROR);
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<?> constraints(ConstraintViolationException e) {
+        return error(HttpStatus.BAD_REQUEST, "Revisá los campos obligatorios y los valores numéricos");
+    }
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<?> tooLarge(MaxUploadSizeExceededException e) {
+        return error(HttpStatus.PAYLOAD_TOO_LARGE, "Las imágenes superan el tamaño máximo de 30 MB por solicitud");
     }
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<String> handleGenericException(Exception ex) {
-        return new ResponseEntity<>(ex.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+    public ResponseEntity<?> unexpected(Exception e) {
+        log.error("Error procesando la solicitud", e);
+        return error(HttpStatus.INTERNAL_SERVER_ERROR, "No se pudo completar la operación");
     }
 }

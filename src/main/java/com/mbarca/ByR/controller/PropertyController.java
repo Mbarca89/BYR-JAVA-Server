@@ -11,6 +11,9 @@ import com.mbarca.ByR.model.PropertyImages;
 import com.mbarca.ByR.service.PropertyService;
 import com.mbarca.ByR.utils.ImageCompressor;
 import jakarta.validation.Valid;
+import jakarta.validation.Validator;
+import jakarta.validation.ConstraintViolationException;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.web.PagedResourcesAssembler;
@@ -26,8 +29,18 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/properties")
-@CrossOrigin
+
 public class PropertyController {
+    @Autowired private Validator validator;
+    @Autowired private ObjectMapper objectMapper;
+
+    private Property parseProperty(String json) throws Exception {
+        Property property = objectMapper.readValue(json, Property.class);
+        if (property.getName() != null) property.setName(property.getName().trim());
+        var violations = validator.validate(property);
+        if (!violations.isEmpty()) throw new ConstraintViolationException(violations);
+        return property;
+    }
 
     @Autowired
     ImageCompressor imageCompressor;
@@ -35,16 +48,18 @@ public class PropertyController {
     private PropertyService propertyService;
 
     @PostMapping("/publish")
+    @Transactional(rollbackFor = Exception.class)
     public ResponseEntity<?> publishProperty(@RequestParam(value = "images", required = false) List<MultipartFile> files,
                                              @Valid @RequestParam("propertyData") String propertyJson) throws Exception {
-        Property property = new ObjectMapper().readValue(propertyJson, Property.class);
-        System.out.println(property.getImageOrder());
+        Property property = parseProperty(propertyJson);
+        property.setId(null);
+        String imageDirectory = UUID.randomUUID().toString();
         propertyService.findPropertyByName(property.getName());
         List<PropertyImages> propertyImagesList = new ArrayList<>();
         if (files != null && !files.isEmpty()) {
             for (MultipartFile file : files) {
                 if (!file.isEmpty()) {
-                    Images compressedImages = imageCompressor.compressImage(file.getBytes(), true, file.getOriginalFilename(), property.getName());
+                    Images compressedImages = imageCompressor.compressImage(file.getBytes(), true, file.getOriginalFilename(), imageDirectory);
                     PropertyImages propertyImage = new PropertyImages();
                     propertyImage.setThumbnailUrl(compressedImages.getPaths().get(1));
                     propertyImage.setUrl(compressedImages.getPaths().get(0));
@@ -69,8 +84,8 @@ public class PropertyController {
     }
 
     @DeleteMapping("/deleteProperty")
-    public ResponseEntity<?> deleteProperty(@RequestParam UUID propertyId, @RequestParam String propertyName) {
-        propertyService.deleteProperty(propertyId, propertyName);
+    public ResponseEntity<?> deleteProperty(@RequestParam UUID propertyId) {
+        propertyService.deleteProperty(propertyId);
         return ResponseEntity.status(HttpStatus.OK).body("Propiedad eliminada correctamente");
     }
 
@@ -99,25 +114,23 @@ public class PropertyController {
                                                     @RequestParam(required = false) String category,
                                                     @RequestParam(required = false) String location,
                                                     PagedResourcesAssembler<PropertyResponseDto> assembler) {
-        System.out.println("tipo:" + type);
-        System.out.println("categoria" + category);
-        System.out.println("ubicacion: " +location);
         Page<PropertyResponseDto> properties = propertyService.getPaginatedProperties(offset, limit, type, category, location);
         return ResponseEntity.status(HttpStatus.OK).body(assembler.toModel(properties));
     }
 
     @GetMapping("/getById")
     public ResponseEntity<?> getPropertyById(@RequestParam UUID propertyId) {
-        Property property = propertyService.getById(propertyId);
-        PropertyResponseDto response = PropertyMapper.INSTANCE.toDto(property);
+        PropertyResponseDto response = propertyService.getById(propertyId);
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
 
     @PutMapping("/edit/{id}")
+    @Transactional(rollbackFor = Exception.class)
     public ResponseEntity<?> editProperty(@PathVariable("id") UUID propertyId,
                                           @RequestParam(value = "images", required = false) List<MultipartFile> files,
                                           @Valid @RequestParam("propertyData") String propertyJson) throws Exception {
-        Property updatedProperty = new ObjectMapper().readValue(propertyJson, Property.class);
+        Property updatedProperty = parseProperty(propertyJson);
+        propertyService.assertUniqueName(updatedProperty.getName(), propertyId);
         Property existingProperty = propertyService.getByIdToEdit(propertyId);
 
         existingProperty.setName(updatedProperty.getName());
@@ -143,7 +156,7 @@ public class PropertyController {
             List<PropertyImages> newPropertyImages = new ArrayList<>();
             for (MultipartFile file : files) {
                 if (!file.isEmpty()) {
-                    Images compressedImages = imageCompressor.compressImage(file.getBytes(), true, file.getOriginalFilename(), updatedProperty.getName());
+                    Images compressedImages = imageCompressor.compressImage(file.getBytes(), true, file.getOriginalFilename(), propertyId.toString());
                     PropertyImages propertyImage = new PropertyImages();
                     propertyImage.setThumbnailUrl(compressedImages.getPaths().get(1));
                     propertyImage.setUrl(compressedImages.getPaths().get(0));

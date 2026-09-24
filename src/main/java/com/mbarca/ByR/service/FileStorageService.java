@@ -1,115 +1,104 @@
 package com.mbarca.ByR.service;
-
+import com.mbarca.ByR.exceptions.NotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
+import org.springframework.core.io.*;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.*;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.io.File;
 import java.io.IOException;
-import java.net.MalformedURLException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.text.SimpleDateFormat;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.List;
-import java.util.Objects;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import java.nio.file.*;
+import java.util.*;
 
 @Service
 public class FileStorageService {
+    private static final Logger log = LoggerFactory.getLogger(FileStorageService.class);
     private final Path rootLocation;
-
-    public FileStorageService(@Value("${file.storage.location}") String storageLocation) {
-        this.rootLocation = Paths.get(storageLocation);
-        init();
+    public FileStorageService(@Value("${file.storage.location}") String location) {
+        try {
+            Path root = Paths.get(location).toAbsolutePath().normalize();
+            Files.createDirectories(root);
+            rootLocation = root.toRealPath();
+        } catch (IOException e) { throw new IllegalStateException("No se pudo inicializar el almacenamiento", e); }
     }
 
-    public void init() {
+    public Path checkedPath(String path) {
+        Path candidate = Paths.get(path);
+        if (!candidate.isAbsolute()) candidate = rootLocation.resolve(candidate);
+        candidate = candidate.toAbsolutePath().normalize();
+        if (candidate.equals(rootLocation) || !candidate.startsWith(rootLocation))
+            throw new IllegalArgumentException("Ruta de archivo inválida");
+        // Check existing ancestors too; normalization alone does not prevent symbolic-link escapes.
+        Path ancestor = candidate;
         try {
-            Files.createDirectories(rootLocation);
-        } catch (IOException e) {
-            throw new RuntimeException("No se pudo inicializar el almacenamiento", e);
-        }
+            while (ancestor != null && !Files.exists(ancestor, LinkOption.NOFOLLOW_LINKS)) ancestor = ancestor.getParent();
+            if (ancestor == null || !ancestor.toRealPath().startsWith(rootLocation))
+                throw new IllegalArgumentException("Ruta de archivo inválida");
+        } catch (IOException e) { throw new IllegalArgumentException("Ruta de archivo inválida", e); }
+        return candidate;
     }
 
     public List<String> store(MultipartFile[] files, String subDir) {
-        Path subDirPath = rootLocation.resolve(subDir);
+        if (!subDir.matches("[a-zA-Z0-9-]+")) throw new IllegalArgumentException("Directorio de imágenes inválido");
+        Path directory = checkedPath(subDir);
+        List<String> written = new ArrayList<>();
         try {
-            Files.createDirectories(subDirPath);
-            return Stream.of(files).map(file -> {
-                try {
-                    if (file.isEmpty()) {
-                        throw new RuntimeException("No se recibió ningún archivo");
+            Files.createDirectories(directory);
+            for (MultipartFile file : files) {
+                if (file.isEmpty()) throw new IllegalArgumentException("No se recibió ningún archivo");
+                Path destination = checkedPath(directory.resolve(UUID.randomUUID() + ".jpg").toString());
+                try (var stream = file.getInputStream()) { Files.copy(stream, destination); }
+                written.add(destination.toString());
+            }
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                List<String> rollbackPaths = List.copyOf(written);
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override public void afterCompletion(int status) {
+                        if (status != STATUS_COMMITTED) cleanup(rollbackPaths);
                     }
+                });
+            }
+            return written;
+        } catch (IOException | RuntimeException e) {
+            cleanup(written);
+            throw new IllegalStateException("No se pudieron guardar las imágenes", e);
+        }
+    }
 
-                    String originalFilename = Objects.requireNonNull(file.getOriginalFilename());
-                    String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
-                    String newFilename = timestamp + "_" + originalFilename;
+    public Resource loadImage(String property, String filename) {
+        if (property.contains("/") || property.contains("\\") || filename.contains("/") || filename.contains("\\"))
+            throw new IllegalArgumentException("Ruta de archivo inválida");
+        Path path = checkedPath(rootLocation.resolve(property).resolve(filename).toString());
+        if (!Files.isRegularFile(path) || !Files.isReadable(path)) throw new NotFoundException("Imagen no encontrada");
+        return new FileSystemResource(path);
+    }
 
-                    Path destinationFile = subDirPath.resolve(
-                                    Paths.get(newFilename))
-                            .normalize().toAbsolutePath();
-                    if (Files.exists(destinationFile)) {
-                        throw new RuntimeException("Ya existe un archivo con el nombre " + newFilename);
-                    }
-                    Files.copy(file.getInputStream(), destinationFile,
-                            StandardCopyOption.REPLACE_EXISTING);
-                    return destinationFile.toString();
-                } catch (IOException e) {
-                    throw new RuntimeException("Error al guardar el archivo", e);
+    public void deleteAfterCommit(List<String> paths) {
+        // Fail before deleting DB records when a stored path is outside the configured root.
+        paths.forEach(this::checkedPath);
+        if (!TransactionSynchronizationManager.isSynchronizationActive())
+            throw new IllegalStateException("La eliminación de imágenes requiere una transacción");
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override public void afterCommit() { cleanup(paths); }
+        });
+    }
+
+    private void cleanup(List<String> paths) {
+        for (String stored : paths) {
+            try {
+                Path path = checkedPath(stored);
+                Files.deleteIfExists(path);
+                Path directory = path.getParent();
+                if (!directory.equals(rootLocation)) {
+                    try (var remaining = Files.list(directory)) {
+                        if (remaining.findAny().isEmpty()) Files.deleteIfExists(directory);
+                    } catch (NoSuchFileException ignored) { }
                 }
-            }).collect(Collectors.toList());
-        } catch (IOException e) {
-            throw new RuntimeException("Error al crear el directorio.", e);
-        }
-    }
-
-    public Resource loadAsResource(String filename) {
-        try {
-            Path file = load(filename);
-            Resource resource = new UrlResource(file.toUri());
-            if (resource.exists() || resource.isReadable()) {
-                return resource;
-            } else {
-                throw new RuntimeException("Error al leer el archivo: " + filename);
+            } catch (IOException | RuntimeException e) {
+                // A failed cleanup must not undo a committed database operation.
+                log.error("No se pudo limpiar una imagen; revisar el almacenamiento", e);
             }
-        } catch (MalformedURLException e) {
-            throw new RuntimeException("Error al leer el archivo: " + filename, e);
-        }
-    }
-
-    public void deletePropertyDirectory(String propertyName) {
-        Path patientDirectory = rootLocation.resolve(propertyName);
-        try {
-            Files.walk(patientDirectory)
-                    .sorted(Comparator.reverseOrder())
-                    .map(Path::toFile)
-                    .forEach(File::delete);
-        } catch (IOException e) {
-            throw new RuntimeException("Error al eliminar el directorio de la propiedad", e);
-        }
-    }
-
-    private Path load(String filename) {
-        return rootLocation.resolve(filename);
-    }
-
-    public void deleteFileByPath(String filePath) {
-        try {
-            Path file = Paths.get(filePath).normalize().toAbsolutePath();
-            if (Files.exists(file)) {
-                Files.delete(file);
-            } else {
-                throw new RuntimeException("El archivo no existe: " + filePath);
-            }
-        } catch (IOException e) {
-            throw new RuntimeException("Error al eliminar el archivo: " + filePath, e);
         }
     }
 }

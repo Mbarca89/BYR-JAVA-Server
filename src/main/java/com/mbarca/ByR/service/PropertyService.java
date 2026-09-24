@@ -1,144 +1,100 @@
 package com.mbarca.ByR.service;
 
-import com.mbarca.ByR.domain.ImageUrls;
-import com.mbarca.ByR.dto.Response.PropertyPaginatedResponseDto;
 import com.mbarca.ByR.dto.Response.PropertyResponseDto;
 import com.mbarca.ByR.exceptions.NotFoundException;
 import com.mbarca.ByR.exceptions.RepositoryException;
 import com.mbarca.ByR.mapper.PropertyMapper;
-import com.mbarca.ByR.model.Property;
-import com.mbarca.ByR.model.PropertyImages;
+import com.mbarca.ByR.model.*;
 import com.mbarca.ByR.repository.PropertyRepository;
-import com.mbarca.ByR.utils.ImageCompressor;
-import org.springframework.data.domain.Page;
-import com.mbarca.ByR.utils.UrlGenerator;
+import com.mbarca.ByR.utils.*;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
-import org.springframework.data.domain.PageRequest;
-
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.stream.Collectors;
+import org.springframework.transaction.annotation.Transactional;
+import java.util.*;
 
 @Service
 public class PropertyService {
-    @Autowired
-    PropertyRepository propertyRepository;
+    @Autowired PropertyRepository propertyRepository;
+    @Autowired FileStorageService fileStorageService;
+    @Autowired UrlGenerator urlGenerator;
 
-    @Autowired
-    FileStorageService fileStorageService;
-
-    @Autowired
-    UrlGenerator urlGenerator;
-
+    @Transactional
     public void publishProperty(Property property) {
-            propertyRepository.save(property);
+        property.setImageOrder(ImageOrder.normalize(property.getImageOrder(), property.getImages().size()));
+        propertyRepository.save(property);
     }
+    @Transactional(readOnly = true)
+    public List<Property> getPropertyList() { return propertyRepository.findAll(); }
 
-    public List<Property> getPropertyList() {
-        return propertyRepository.findAll();
+    public void findPropertyByName(String name) throws RepositoryException {
+        assertUniqueName(name, null);
     }
-
-    public void findPropertyByName (String name) throws RepositoryException {
-        Optional<Property> propertyOptional = propertyRepository.findByName(name);
-        if(propertyOptional.isPresent()) {
+    public void assertUniqueName(String name, UUID exceptId) throws RepositoryException {
+        Optional<Property> existing = propertyRepository.findByName(name);
+        if (existing.isPresent() && !Objects.equals(existing.get().getId(), exceptId))
             throw new RepositoryException("Ya existe una propiedad con ese nombre");
-        }
     }
 
-    public void deleteProperty(UUID propertyId, String propertyName) {
-        propertyRepository.deleteById(propertyId);
-        fileStorageService.deletePropertyDirectory(propertyName);
+    @Transactional
+    public void deleteProperty(UUID propertyId) {
+        Property property = getByIdToEdit(propertyId);
+        // Only remove files referenced by this property, never a client-supplied directory name.
+        List<String> paths = property.getImages().stream()
+                .flatMap(image -> java.util.stream.Stream.of(image.getUrl(), image.getThumbnailUrl())).toList();
+        fileStorageService.deleteAfterCommit(paths);
+        propertyRepository.delete(property);
     }
 
+    @Transactional(readOnly = true)
     public List<PropertyResponseDto> getFeaturedProperties() {
-        List<Property> properties = propertyRepository.findFeaturedPropertiesWithImages();
-        for(Property property : properties) {
-            PropertyImages newImages = new PropertyImages();
-            newImages.setUrl(urlGenerator.generateUrlList(property.getImages().get(property.getImageOrder().getFirst()).getUrl()));
-            List<PropertyImages> newPropertyImages = new ArrayList<>();
-            newPropertyImages.add(newImages);
-            property.setImages(newPropertyImages);
-        }
-        return properties.stream().map(PropertyMapper.INSTANCE::toDto).toList();
+        return propertyRepository.findFeaturedPropertiesWithImages().stream().map(p -> toResponse(p, true)).toList();
     }
-
+    @Transactional(readOnly = true)
     public List<PropertyResponseDto> getLastProperties() {
-        List<Property> properties = propertyRepository.findTop10ByOrderByCreatedAtDesc();
-        for(Property property : properties) {
-            PropertyImages newImages = new PropertyImages();
-            newImages.setThumbnailUrl(urlGenerator.generateUrlList(property.getImages().get(property.getImageOrder().getFirst()).getThumbnailUrl()));
-            List<PropertyImages> newPropertyImages = new ArrayList<>();
-            newPropertyImages.add(newImages);
-            property.setImages(newPropertyImages);
-        }
-        return properties.stream().map(PropertyMapper.INSTANCE::toDto).toList();
+        return propertyRepository.findTop10ByOrderByCreatedAtDesc().stream().map(p -> toResponse(p, true)).toList();
     }
-
+    @Transactional(readOnly = true)
     public List<PropertyResponseDto> getAllProperties() {
-        List<Property> properties = propertyRepository.findAll();
-        for(Property property : properties) {
-            PropertyImages newImages = new PropertyImages();
-            newImages.setThumbnailUrl(urlGenerator.generateUrlList(property.getImages().get(property.getImageOrder().getFirst()).getThumbnailUrl()));
-            List<PropertyImages> newPropertyImages = new ArrayList<>();
-            newPropertyImages.add(newImages);
-            property.setImages(newPropertyImages);
-        }
-        return properties.stream().map(PropertyMapper.INSTANCE::toDto).toList();
+        return propertyRepository.findAll().stream().map(p -> toResponse(p, true)).toList();
     }
-
+    @Transactional(readOnly = true)
     public Page<PropertyResponseDto> getPaginatedProperties(int offset, int limit, String type, String category, String location) {
-        Pageable pageable = PageRequest.of(offset, limit);
-        String processedType = (type == null || type.trim().isEmpty()) ? null : type;
-        String processedCategory = (category == null || category.trim().isEmpty()) ? null : category;
-        String processedLocation = (location == null || location.trim().isEmpty()) ? null : location;
+        if (offset < 0 || limit < 1 || limit > 100)
+            throw new IllegalArgumentException("Página inválida: offset debe ser >= 0 y limit debe estar entre 1 y 100");
+        Pageable pageable = PageRequest.of(offset, limit, Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by("id")));
+        return propertyRepository.findAllWithFilters(filter(type), filter(category), filter(location), pageable)
+                .map(p -> toResponse(p, true));
+    }
+    private String filter(String value) { return value == null || value.isBlank() ? null : value.trim(); }
 
-
-        Page<Property> propertyPage = propertyRepository.findAllWithFilters(processedType, processedCategory, processedLocation, pageable);
-
-        return propertyPage.map(property -> {
-            PropertyImages newImages = new PropertyImages();
-            newImages.setThumbnailUrl(urlGenerator.generateUrlList(
-                    property.getImages().get(property.getImageOrder().getFirst()).getThumbnailUrl())
-            );
-
-            List<PropertyImages> newPropertyImages = new ArrayList<>();
-            newPropertyImages.add(newImages);
-            property.setImages(newPropertyImages);
-
-            return PropertyMapper.INSTANCE.toDto(property);
-        });
+    @Transactional(readOnly = true)
+    public PropertyResponseDto getById(UUID id) { return toResponse(getByIdToEdit(id), false); }
+    public Property getByIdToEdit(UUID id) {
+        return propertyRepository.findById(id).orElseThrow(() -> new NotFoundException("Propiedad no encontrada"));
     }
 
-    public Property getById (UUID propertyId) {
-        Optional<Property> propertyOptional = propertyRepository.findById(propertyId);
-        Property property = new Property();
-        if(propertyOptional.isPresent()) {
-            property = propertyOptional.get();
+    private PropertyResponseDto toResponse(Property property, boolean summary) {
+        // Convert detached copies: modifying managed images in a GET can corrupt stored paths.
+        PropertyResponseDto dto = PropertyMapper.INSTANCE.toDto(property);
+        List<PropertyImages> source = property.getImages() == null ? List.of() : property.getImages();
+        List<Integer> order = ImageOrder.normalize(property.getImageOrder(), source.size());
+        List<PropertyImages> images = new ArrayList<>();
+        if (summary) {
+            if (!order.isEmpty()) images.add(publicImage(source.get(order.getFirst())));
+            dto.setImageOrder(images.isEmpty() ? List.of() : List.of(0));
         } else {
-            throw new NotFoundException("Propiedad no encontrada");
+            source.forEach(image -> images.add(publicImage(image)));
+            dto.setImageOrder(order);
         }
-        List<PropertyImages> images = property.getImages();
-        for(PropertyImages image : images) {
-            image.setThumbnailUrl(urlGenerator.generateUrlList(image.getThumbnailUrl()));
-            image.setUrl(urlGenerator.generateUrlList(image.getUrl()));
-        }
-        property.setImages(images);
-        return property;
+        dto.setImages(images);
+        return dto;
     }
-
-    public Property getByIdToEdit (UUID propertyId) {
-        Optional<Property> propertyOptional = propertyRepository.findById(propertyId);
-        Property property = new Property();
-        if(propertyOptional.isPresent()) {
-            property = propertyOptional.get();
-        } else {
-            throw new NotFoundException("Propiedad no encontrada");
-        }
-        return property;
+    private PropertyImages publicImage(PropertyImages image) {
+        PropertyImages copy = new PropertyImages();
+        copy.setId(image.getId());
+        copy.setUrl(urlGenerator.generateUrlList(image.getUrl()));
+        copy.setThumbnailUrl(urlGenerator.generateUrlList(image.getThumbnailUrl()));
+        return copy;
     }
 }

@@ -31,6 +31,7 @@ public class ImageCompressor {
 
     public Images compressImage(byte[] imageData, boolean saveFile, String fileName, String propertyName) throws Exception {
         BufferedImage originalImage = ImageIO.read(new ByteArrayInputStream(imageData));
+        if (originalImage == null) throw new IllegalArgumentException("El archivo no es una imagen compatible");
 
         // Rotate the image based on EXIF orientation
         BufferedImage rotatedImage = rotateImage(originalImage, imageData);
@@ -61,7 +62,8 @@ public class ImageCompressor {
                 orientation = directory.getInt(ExifIFD0Directory.TAG_ORIENTATION);
             }
         } catch (Exception e) {
-            throw new Exception("Error al rotar la imagen: " + e.getMessage());
+            // Missing or unsupported EXIF data must not reject an otherwise valid image.
+            return originalImage;
         }
 
         switch (orientation) {
